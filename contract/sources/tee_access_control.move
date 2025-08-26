@@ -1,8 +1,4 @@
 module seal_integration::seal_manager {
-    use sui::object;
-    use sui::tx_context;
-    use sui::transfer;
-    use std::vector;
     use sui::vec_map::{Self, VecMap};
 
     // Error codes
