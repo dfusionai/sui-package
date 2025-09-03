@@ -2,11 +2,8 @@ module seal_integration::seal_manager {
     use sui::vec_map::{Self, VecMap};
 
     // Error codes
-    const EPolicyNotFound: u64 = 0;       // Policy ID does not match EncryptedFile's policy_id
     const EAccessDenied: u64 = 2;         // Requester not in AccessPolicy rules
-    const EBlobIdMismatch: u64 = 3;       // Blob ID in TEEAttestation doesn't match EncryptedFile
     const EEmptyAllowedAddresses: u64 = 4; // Allowed addresses vector is empty
-    const EZeroAddressAttestation: u64 = 5; // Attested_by address is 0x0
     const EInvalidId: u64 = 6;            // ID prefix mismatch (added for namespace check)
 
     // AccessPolicy: Defines who can decrypt the file
@@ -36,7 +33,7 @@ module seal_integration::seal_manager {
     public entry fun create_access_policy(
         allowed_addresses: vector<address>,
         ctx: &mut TxContext
-    ) {
+    ) { 
         assert!(vector::length(&allowed_addresses) > 0, EEmptyAllowedAddresses);
 
         let mut rules = vec_map::empty<address, bool>();
@@ -107,27 +104,19 @@ module seal_integration::seal_manager {
         true
     }
 
-    // Step 5: Approve access for the requester to query decryption key shares
+    // SIMPLIFIED: Just check policy permissions
     entry fun seal_approve(
-        id: vector<u8>, // First parameter as blob_id (identity), per SEAL SDK rule
-        file: &EncryptedFile,
-        policy: &AccessPolicy,
-        attestation: &TEEAttestation,
-        wallet_address: address,
+        id: vector<u8>,           // Contains policy_id + nonce
+        policy: &AccessPolicy,    // The policy object
+        ctx: &TxContext
     ) {
-        // Check if id has the correct prefix (namespace of policy)
-        let namespace = namespace(policy);
-        assert!(is_prefix(namespace, id), EInvalidId);
+        // 1. Verify the id starts with the policy's namespace (policy object ID)
+        let policy_namespace = namespace(policy);
+        assert!(is_prefix(policy_namespace, id), EInvalidId);
 
-        // Verify the blob_id matches the requested identity
-        assert!(file.blob_id == id, EBlobIdMismatch);
-
-        // Access control checks
-        assert!(file.policy_id == object::uid_to_inner(&policy.id), EPolicyNotFound);
-        assert!(vec_map::contains(&policy.rules, &wallet_address), EAccessDenied);
-        assert!(attestation.attested_by != @0x0, EZeroAddressAttestation);
-        assert!(attestation.blob_id == file.blob_id, EBlobIdMismatch);
-        // No return value, aborts on failure as per SEAL SDK rule
+        // 2. Check that the transaction sender is authorized in the policy
+        let sender = tx_context::sender(ctx);
+        assert!(vec_map::contains(&policy.rules, &sender), EAccessDenied);
     }
 
     // Utility: Fetch AccessPolicy details (used by SEAL SDK)
